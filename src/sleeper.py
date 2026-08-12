@@ -14,6 +14,8 @@ BASE = "https://api.sleeper.app"
 
 SCORING_KEY = {"ppr": "pts_ppr", "half_ppr": "pts_half_ppr", "std": "pts_std"}
 
+ADP_KEY = {"ppr": "adp_ppr", "half_ppr": "adp_half_ppr", "std": "adp_std"}
+
 FANTASY_POSITIONS = ("QB", "RB", "WR", "TE", "K", "DEF")
 
 
@@ -27,12 +29,18 @@ def get_players(ttl_hours: float = 24) -> dict:
 
 
 def get_projections(season: str, scoring: str = "ppr", ttl_hours: float = 6) -> dict:
-    """player_id -> season projected fantasy points, for the given scoring.
+    """player_id -> {"points": season projection, "adp": Sleeper's own ADP}.
+
+    The same payload carries both, so Sleeper ADP is free -- no extra request.
+    That matters: it is the ADP your leaguemates are actually looking at while
+    they draft, which makes it the better predictor of what they will do.
 
     Undocumented endpoint. Returns {} on failure so callers can fall back.
     """
     key = SCORING_KEY.get(scoring, "pts_ppr")
-    out: dict[str, float] = {}
+    adp_key = ADP_KEY.get(scoring, "adp_ppr")
+    out: dict[str, dict] = {}
+
     for pos in FANTASY_POSITIONS:
         url = (
             f"{BASE}/projections/nfl/{season}"
@@ -44,14 +52,27 @@ def get_projections(season: str, scoring: str = "ppr", ttl_hours: float = 6) -> 
             continue
         if not isinstance(rows, list):
             continue
+
         for row in rows:
             pid = row.get("player_id")
+            if not pid:
+                continue
             stats = row.get("stats") or {}
             pts = stats.get(key)
-            if pid and isinstance(pts, (int, float)) and pts > 0:
-                # Keep the best value if a player somehow appears twice.
-                if pts > out.get(str(pid), 0.0):
-                    out[str(pid)] = float(pts)
+            if not isinstance(pts, (int, float)) or pts <= 0:
+                continue
+
+            adp = stats.get(adp_key)
+            # Sleeper parks undrafted players at 999; that is a sentinel, not
+            # a draft position.
+            if not isinstance(adp, (int, float)) or not 0 < adp < 900:
+                adp = None
+
+            key_id = str(pid)
+            prior = out.get(key_id)
+            if prior is None or pts > prior["points"]:
+                out[key_id] = {"points": float(pts), "adp": adp}
+
     return out
 
 

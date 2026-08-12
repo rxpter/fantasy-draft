@@ -74,7 +74,7 @@ body{
 .hero .score{text-align:right;flex-shrink:0}
 .hero .val{font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1}
 .hero .gap{color:var(--text-3);font-size:12px;margin-top:5px}
-.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:14px 18px 16px}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;padding:14px 18px 16px}
 .stat{background:var(--surface-2);border-radius:8px;padding:9px 11px}
 .stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3)}
 .stat .v{font-size:17px;font-weight:600;margin-top:3px}
@@ -156,7 +156,7 @@ td.rank{color:var(--text-3);font-size:12px;width:30px}
       <table>
         <thead><tr>
           <th class="l" style="width:30px"></th><th class="l">Player</th>
-          <th>Proj</th><th>VOR</th><th>Val</th><th>Up</th><th>Back</th><th>Sim</th>
+          <th>ADP</th><th>Proj</th><th>VOR</th><th>Val</th><th>Up</th><th>Back</th><th>Sim</th>
           <th class="l" style="padding-left:16px">Notes</th>
         </tr></thead>
         <tbody id="board"></tbody>
@@ -186,73 +186,142 @@ td.rank{color:var(--text-3);font-size:12px;width:30px}
 <script>
 const POS = {QB:'--qb',RB:'--rb',WR:'--wr',TE:'--te',K:'--k',DEF:'--def'};
 const $ = id => document.getElementById(id);
-const rows = new Map();
+const rows = new Map(), bars = new Map(), slots = new Map(), pills = new Map();
 let prevSim = null, fails = 0;
 
 const posColor = p => `var(${POS[p] || '--k'})`;
 const survColor = s => s >= .7 ? 'var(--good)' : s >= .35 ? 'var(--warn)' : 'var(--bad)';
 const costColor = c => c >= 15 ? 'var(--bad)' : c >= 6 ? 'var(--warn)' : 'var(--good)';
 
+/* Every DOM write goes through these. Assigning innerHTML or textContent on
+   each poll re-creates nodes even when the value is identical, which is what
+   made the board flicker once a second. Writing only on change removes it. */
+function setText(el, v){ const s = String(v); if (el.textContent !== s) el.textContent = s; }
+function setStyle(el, prop, v){ if (el.style[prop] !== v) el.style[prop] = v; }
+function setClass(el, cls, on){ if (el.classList.contains(cls) !== !!on) el.classList.toggle(cls, !!on); }
+
 function tween(el, to, dur = 550){
   const from = prevSim === null ? to : prevSim;
-  if (from === to){ el.textContent = to.toFixed(0); return; }
+  if (from === to){ setText(el, to.toFixed(0)); return; }
   const t0 = performance.now();
   const step = now => {
     const k = Math.min(1, (now - t0) / dur);
     const e = 1 - Math.pow(1 - k, 3);
-    el.textContent = (from + (to - from) * e).toFixed(0);
+    setText(el, (from + (to - from) * e).toFixed(0));
     if (k < 1) requestAnimationFrame(step);
   };
   requestAnimationFrame(step);
 }
 
-function tag(p){
-  return `<span class="tag" style="background:${posColor(p)}22;color:${posColor(p)}">${p}</span>`;
+function makeTag(p){
+  const s = document.createElement('span');
+  s.className = 'tag';
+  applyTag(s, p);
+  return s;
+}
+function applyTag(el, p){
+  setText(el, p);
+  setStyle(el, 'background', `${posColor(p)}22`);
+  setStyle(el, 'color', posColor(p));
+}
+
+const HERO_STATS = ['proj','adp','vor','val','up','back'];
+let heroNodes = null;
+
+function buildHero(){
+  const meta = $('h-meta'); meta.textContent = '';
+  const tagEl = makeTag('RB'); const metaTxt = document.createElement('span');
+  meta.append(tagEl, metaTxt);
+
+  const wrap = $('h-stats'); wrap.textContent = '';
+  const vals = {};
+  HERO_STATS.forEach(label => {
+    const d = document.createElement('div'); d.className = 'stat';
+    const l = document.createElement('div'); l.className = 'l'; l.textContent = label;
+    const v = document.createElement('div'); v.className = 'v';
+    d.append(l, v); wrap.appendChild(d); vals[label] = v;
+  });
+  heroNodes = {tagEl, metaTxt, vals};
 }
 
 function renderHero(recs){
-  if (!recs.length){ $('h-name').textContent = '—'; $('h-meta').textContent=''; $('h-note').textContent=''; $('h-sim').textContent='—'; $('h-gap').textContent=''; $('h-stats').innerHTML=''; return; }
+  if (!heroNodes) buildHero();
+  const n = heroNodes;
+  if (!recs.length){
+    setText($('h-name'), '—'); setText(n.metaTxt, ''); setText($('h-note'), '');
+    setText($('h-sim'), '—'); setText($('h-gap'), '');
+    HERO_STATS.forEach(k => setText(n.vals[k], '—'));
+    return;
+  }
   const r = recs[0];
-  $('h-name').textContent = r.name;
-  $('h-meta').innerHTML = `${tag(r.position)}${r.team} · bye ${r.bye ?? '—'} · adp ${r.adp}`;
-  $('h-note').textContent = r.note || '';
-  if (r.sim !== null && r.sim !== undefined){
+  setText($('h-name'), r.name);
+  applyTag(n.tagEl, r.position);
+  setText(n.metaTxt, `${r.team} · bye ${r.bye ?? '—'}`);
+  setText($('h-note'), r.note || '');
+
+  if (r.sim != null){
     tween($('h-sim'), r.sim); prevSim = r.sim;
     const gap = recs[1] && recs[1].sim != null ? (r.sim - recs[1].sim) : null;
-    $('h-gap').textContent = gap === null ? '' : gap > 1.5 ? `+${gap.toFixed(1)} over next` : `near tie · +${gap.toFixed(1)}`;
-  } else { $('h-sim').textContent = '—'; $('h-gap').textContent = ''; }
-  const cells = [['proj',r.projection],['vor',r.vor],['val',r.val],['up',r.upside],['back',(r.survive*100).toFixed(0)+'%']];
-  $('h-stats').innerHTML = cells.map(([l,v],i)=>{
-    const c = i===4 ? `color:${survColor(r.survive)}` : i===3 && r.upside>=10 ? 'color:var(--good)' : '';
-    return `<div class="stat"><div class="l">${l}</div><div class="v" style="${c}">${v}</div></div>`;
-  }).join('');
+    setText($('h-gap'), gap === null ? '' : gap > 1.5 ? `+${gap.toFixed(1)} over next` : `near tie · +${gap.toFixed(1)}`);
+  } else { setText($('h-sim'), '—'); setText($('h-gap'), ''); }
+
+  const vals = {proj:r.projection.toFixed(1), adp:r.adp.toFixed(1), vor:r.vor.toFixed(0),
+                val:r.val.toFixed(0), up:r.upside.toFixed(0), back:(r.survive*100).toFixed(0)+'%'};
+  HERO_STATS.forEach(k => setText(n.vals[k], vals[k]));
+  setStyle(n.vals.back, 'color', survColor(r.survive));
+  setStyle(n.vals.up, 'color', r.upside >= 10 ? 'var(--good)' : '');
 }
 
 function buildRow(r){
   const tr = document.createElement('tr');
   tr.dataset.pid = r.pid;
   tr.classList.add('enter');
-  tr.innerHTML = `<td class="rank"></td><td class="l"></td><td></td><td></td><td></td>
-    <td class="up"></td><td class="back"></td><td class="sim"></td><td class="notes"></td>`;
+  const mk = (cls) => { const td = document.createElement('td'); if (cls) td.className = cls; tr.appendChild(td); return td; };
+
+  const rank = mk('rank');
+  const who = mk('l');
+  const tagEl = makeTag(r.position);
+  const name = document.createElement('span'); name.className = 'pname';
+  const sm = document.createElement('span'); sm.className = 'sm';
+  who.append(tagEl, name, sm);
+
+  const adp = mk(), proj = mk(), vor = mk(), val = mk();
+  const up = mk(); const upSpan = document.createElement('span'); up.appendChild(upSpan);
+  const back = mk(); const backSpan = document.createElement('span');
+  backSpan.style.fontWeight = '600'; back.appendChild(backSpan);
+  const sim = mk(), note = mk('notes');
+
+  tr._ = {rank, tagEl, name, sm, adp, proj, vor, val, upSpan, backSpan, sim, note};
   return tr;
 }
 
 function fillRow(tr, r, i){
-  const c = tr.children;
-  c[0].textContent = i + 1;
-  c[1].innerHTML = `${tag(r.position)}<span class="pname">${r.name}</span><span class="sm">${r.team}${r.bye?' · '+r.bye:''}</span>`;
-  c[2].textContent = r.projection.toFixed(1);
-  c[3].textContent = r.vor.toFixed(0);
-  c[4].textContent = r.val.toFixed(0);
-  c[5].innerHTML = r.upside >= 10
-    ? `<span class="chip" style="background:var(--good-soft);color:var(--good)">${r.upside.toFixed(0)}</span>`
-    : `<span style="color:var(--text-3)">${r.upside.toFixed(0)}</span>`;
-  c[6].innerHTML = `<span style="color:${survColor(r.survive)};font-weight:600">${(r.survive*100).toFixed(0)}%</span>`;
-  const sim = c[7], next = r.sim == null ? '—' : r.sim.toFixed(1);
-  if (sim.textContent && sim.textContent !== next) sim.classList.remove('flash'), void sim.offsetWidth, sim.classList.add('flash');
-  sim.textContent = next;
-  c[8].textContent = r.note || '';
-  tr.classList.toggle('top', i === 0);
+  const n = tr._;
+  setText(n.rank, i + 1);
+  applyTag(n.tagEl, r.position);
+  setText(n.name, r.name);
+  setText(n.sm, `${r.team}${r.bye ? ' · ' + r.bye : ''}`);
+  setText(n.adp, r.adp.toFixed(1));
+  setText(n.proj, r.projection.toFixed(1));
+  setText(n.vor, r.vor.toFixed(0));
+  setText(n.val, r.val.toFixed(0));
+
+  setText(n.upSpan, r.upside.toFixed(0));
+  const boom = r.upside >= 10;
+  setClass(n.upSpan, 'chip', boom);
+  setStyle(n.upSpan, 'background', boom ? 'var(--good-soft)' : '');
+  setStyle(n.upSpan, 'color', boom ? 'var(--good)' : 'var(--text-3)');
+
+  setText(n.backSpan, (r.survive * 100).toFixed(0) + '%');
+  setStyle(n.backSpan, 'color', survColor(r.survive));
+
+  const next = r.sim == null ? '—' : r.sim.toFixed(1);
+  if (n.sim.textContent && n.sim.textContent !== next){
+    n.sim.classList.remove('flash'); void n.sim.offsetWidth; n.sim.classList.add('flash');
+  }
+  setText(n.sim, next);
+  setText(n.note, r.note || '');
+  setClass(tr, 'top', i === 0);
 }
 
 function renderBoard(recs, done){
@@ -291,34 +360,84 @@ function renderBoard(recs, done){
 
 function renderWaiting(out){
   const max = Math.max(1, ...out.map(o => o.cost));
-  $('waiting').innerHTML = out.slice(0, 6).map(o => `
-    <div class="row">
-      <div class="p" style="color:${posColor(o.position)}">${o.position}</div>
-      <div class="track"><div class="fill" style="width:${Math.max(2,(o.cost/max)*100)}%;background:${costColor(o.cost)}"></div></div>
-      <div class="n">${o.cost.toFixed(0)}</div>
-    </div>`).join('') || '<div class="empty">—</div>';
+  const host = $('waiting'), seen = new Set();
+  out.slice(0, 6).forEach(o => {
+    let b = bars.get(o.position);
+    if (!b){
+      const row = document.createElement('div'); row.className = 'row';
+      const p = document.createElement('div'); p.className = 'p';
+      const track = document.createElement('div'); track.className = 'track';
+      const fill = document.createElement('div'); fill.className = 'fill';
+      const num = document.createElement('div'); num.className = 'n';
+      track.appendChild(fill); row.append(p, track, num);
+      b = {row, p, fill, num}; bars.set(o.position, b);
+    }
+    host.appendChild(b.row);
+    setText(b.p, o.position); setStyle(b.p, 'color', posColor(o.position));
+    // Width is only ever assigned when it changes, so the CSS transition
+    // actually gets to run instead of being reset every second.
+    setStyle(b.fill, 'width', Math.max(2, (o.cost / max) * 100).toFixed(1) + '%');
+    setStyle(b.fill, 'background', costColor(o.cost));
+    setText(b.num, o.cost.toFixed(0));
+    seen.add(o.position);
+  });
+  bars.forEach((b, pos) => { if (!seen.has(pos)){ b.row.remove(); bars.delete(pos); } });
 }
 
 function renderRoster(ro){
-  $('r-count').textContent = `${ro.size}/${ro.capacity}`;
-  $('lineup').innerHTML = ro.lineup.map(p =>
-    `<div class="slot"><div class="s" style="color:${posColor(p.position)}">${p.slot}</div>
-     <div class="p">${p.name}<span class="sm">${p.bye ?? '—'}</span></div></div>`).join('')
-    + (ro.bench.length ? `<div class="slot" style="margin-top:6px"><div class="s">BN</div>
-       <div class="p" style="color:var(--text-3);white-space:normal">${ro.bench.map(b=>b.name).join(', ')}</div></div>` : '')
-    || '<div class="empty">no picks yet</div>';
+  setText($('r-count'), `${ro.size}/${ro.capacity}`);
 
-  $('depth').innerHTML = ro.depth.map(d => {
+  const host = $('lineup'), seen = new Set();
+  ro.lineup.forEach(p => {
+    const key = `${p.slot}:${p.pid}`;
+    let s = slots.get(key);
+    if (!s){
+      const row = document.createElement('div'); row.className = 'slot';
+      const lbl = document.createElement('div'); lbl.className = 's';
+      const who = document.createElement('div'); who.className = 'p';
+      const nm = document.createElement('span');
+      const bye = document.createElement('span'); bye.className = 'sm';
+      who.append(nm, bye); row.append(lbl, who);
+      s = {row, lbl, nm, bye}; slots.set(key, s);
+    }
+    host.appendChild(s.row);
+    setText(s.lbl, p.slot); setStyle(s.lbl, 'color', posColor(p.position));
+    setText(s.nm, p.name); setText(s.bye, p.bye ?? '—');
+    seen.add(key);
+  });
+  slots.forEach((s, k) => { if (!seen.has(k)){ s.row.remove(); slots.delete(k); } });
+
+  let bn = slots.get('__bench__');
+  if (!bn){
+    const row = document.createElement('div'); row.className = 'slot'; row.style.marginTop = '6px';
+    const lbl = document.createElement('div'); lbl.className = 's'; lbl.textContent = 'BN';
+    const who = document.createElement('div'); who.className = 'p';
+    who.style.color = 'var(--text-3)'; who.style.whiteSpace = 'normal';
+    row.append(lbl, who); bn = {row, who}; slots.set('__bench__', bn);
+  }
+  if (ro.bench.length){ host.appendChild(bn.row); setText(bn.who, ro.bench.map(b => b.name).join(', ')); }
+  else bn.row.remove();
+
+  const dhost = $('depth'), dseen = new Set();
+  ro.depth.forEach(d => {
+    let pill = pills.get(d.position);
+    if (!pill){ pill = document.createElement('span'); pill.className = 'pill'; pills.set(d.position, pill); }
+    dhost.appendChild(pill);
     const ok = d.have >= d.want;
-    return `<span class="pill" style="background:${ok?'var(--good-soft)':'var(--bad-soft)'};color:${ok?'var(--good)':'var(--bad)'}">${d.position} ${d.have}/${d.want}</span>`;
-  }).join('');
+    setText(pill, `${d.position} ${d.have}/${d.want}`);
+    setStyle(pill, 'background', ok ? 'var(--good-soft)' : 'var(--bad-soft)');
+    setStyle(pill, 'color', ok ? 'var(--good)' : 'var(--bad)');
+    dseen.add(d.position);
+  });
+  pills.forEach((el, pos) => { if (!dseen.has(pos)){ el.remove(); pills.delete(pos); } });
 
-  const bits = [`projected starters <b style="color:var(--text)">${ro.points}</b>`];
-  const needs = Object.entries(ro.needs).map(([k,v])=>`${k}×${v}`).join(', ');
+  const bits = [`projected starters ${ro.points}`];
+  const needs = Object.entries(ro.needs).map(([k, v]) => `${k}×${v}`).join(', ');
   bits.push(needs ? `still needed ${needs}` : 'starters filled');
-  const bc = Object.entries(ro.bye_conflicts).map(([w,n])=>`wk${w}: ${n}`).join(', ');
-  if (bc) bits.push(`<span style="color:var(--bad)">bye conflicts ${bc}</span>`);
-  $('r-foot').innerHTML = bits.join('<br>');
+  const bc = Object.entries(ro.bye_conflicts).map(([w, n]) => `wk${w}: ${n}`).join(', ');
+  if (bc) bits.push(`bye conflicts ${bc}`);
+  setText($('r-foot'), bits.join('  ·  '));
+  setStyle($('r-foot'), 'color', bc ? 'var(--bad)' : '');
 }
 
 function render(d){
@@ -337,19 +456,22 @@ function render(d){
   renderBoard(d.recommendations, done);
   renderWaiting(d.outlook);
   renderRoster(d.roster);
-  $('recent').innerHTML = d.recent.map(p => `${p.pick}. ${p.name}`).join(' · ') || '—';
+  setText($('recent'), d.recent.map(p => `${p.pick}. ${p.name}`).join(' · ') || '—');
 }
 
 async function tick(){
   try{
     const r = await fetch('/state.json', {cache:'no-store'});
-    render(await r.json());
-    fails = 0; $('dot').classList.remove('off'); $('conn').textContent = 'live';
+    const d = await r.json();
+    render(d);
+    fails = 0;
+    setClass($('dot'), 'off', false);
+    setText($('conn'), d.computing ? 'thinking…' : 'live');
   }catch(e){
-    if (++fails > 1){ $('dot').classList.add('off'); $('conn').textContent = 'reconnecting'; }
+    if (++fails > 1){ setClass($('dot'), 'off', true); setText($('conn'), 'reconnecting'); }
   }
 }
-tick(); setInterval(tick, 1000);
+tick(); setInterval(tick, 500);
 </script>
 </body>
 </html>

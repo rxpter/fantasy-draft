@@ -29,7 +29,10 @@ class Player:
     team: str | None
     projection: float = 0.0          # injury-adjusted season points
     raw_projection: float = 0.0
-    adp: float = 999.0
+    adp: float = 999.0          # blended across sources
+    adp_sleeper: float | None = None
+    adp_ffc: float | None = None
+    adp_spread: float = 0.0     # how far the sources disagree, in picks
     sigma: float = 30.0
     adp_stdev: float | None = None
     bye: int | None = None
@@ -59,6 +62,39 @@ class Player:
     def label(self) -> str:
         tag = f" ({self.injury})" if self.injury else ""
         return f"{self.name}{tag}"
+
+
+def blend_adp(sleeper_adp, ffc_adp, ecfg: dict) -> tuple[float | None, float]:
+    """Combine ADP sources into one number, plus how much they disagree.
+
+    Sleeper is weighted higher on purpose: it is the ADP shown inside the app
+    your leaguemates are drafting in, so it predicts their behaviour better
+    than a consensus taken elsewhere. FantasyFootballCalculator still earns its
+    place -- it is the only source broken out by league size, and it supplies
+    the per-player stdev the survival model needs.
+
+    Returns (blended adp or None, absolute disagreement in picks).
+    """
+    weights = ecfg.get("adp_weights") or {}
+    pairs = []
+    if sleeper_adp is not None:
+        pairs.append((float(sleeper_adp), float(weights.get("sleeper", 1.0))))
+    if ffc_adp is not None:
+        pairs.append((float(ffc_adp), float(weights.get("ffc", 1.0))))
+
+    if not pairs:
+        return None, 0.0
+    if len(pairs) == 1:
+        # Short-circuit rather than dividing by the lone weight -- that route
+        # returns 11.999999999999998 for an input of 12.0.
+        return pairs[0][0], 0.0
+
+    total = sum(w for _, w in pairs)
+    spread = abs(pairs[0][0] - pairs[1][0])
+    if total <= 0:
+        return (pairs[0][0] + pairs[1][0]) / 2.0, spread
+
+    return sum(v * w for v, w in pairs) / total, spread
 
 
 def _display_name(pid: str, rec: dict) -> str:
@@ -103,15 +139,17 @@ def build_pool(cfg: dict, league: LeagueConfig, season: str) -> tuple[list[Playe
 
         name = _display_name(pid, rec)
         team = rec.get("team")
-        proj = float(projections.get(str(pid), 0.0))
+        sleeper_row = projections.get(str(pid)) or {}
+        proj = float(sleeper_row.get("points") or 0.0)
+        sleeper_adp = sleeper_row.get("adp")
 
         row = adp_mod.lookup(adp_idx, name, pos, team)
         if row:
             matched += 1
-            adp_val = float(row.get("adp", ecfg["undrafted_adp"]))
+            ffc_adp = float(row.get("adp", ecfg["undrafted_adp"]))
             stdev = row.get("stdev")
         else:
-            adp_val = float(ecfg["undrafted_adp"])
+            ffc_adp = None
             stdev = None
 
         if proj <= 0 and not row:
@@ -119,11 +157,21 @@ def build_pool(cfg: dict, league: LeagueConfig, season: str) -> tuple[list[Playe
 
         from .survival import effective_sigma
 
-        sigma = (
-            effective_sigma(stdev, ecfg["adp_sigma_floor"], ecfg["adp_sigma_inflate"])
-            if row
-            else float(ecfg["undrafted_sigma"])
-        )
+        adp_val, spread = blend_adp(sleeper_adp, ffc_adp, ecfg)
+        if adp_val is None:
+            adp_val = float(ecfg["undrafted_adp"])
+            sigma = float(ecfg["undrafted_sigma"])
+        else:
+            sigma = effective_sigma(
+                stdev, ecfg["adp_sigma_floor"], ecfg["adp_sigma_inflate"]
+            )
+            # Two sources disagreeing about where a player goes is real
+            # uncertainty about where he goes. Fold it into the spread -- but
+            # cap it. Deep players (kickers especially) can differ by 200 picks
+            # simply because both sources mean "undrafted", and that is noise,
+            # not information.
+            capped = min(spread, float(ecfg.get("adp_disagreement_cap", 30.0)))
+            sigma += ecfg.get("adp_disagreement_sigma_weight", 0.0) * capped
 
         injury = rec.get("injury_status") or None
         mult = inj_mult.get(injury, 1.0) if injury else 1.0
@@ -137,6 +185,9 @@ def build_pool(cfg: dict, league: LeagueConfig, season: str) -> tuple[list[Playe
                 raw_projection=proj,
                 projection=proj * mult,
                 adp=adp_val,
+                adp_sleeper=float(sleeper_adp) if sleeper_adp is not None else None,
+                adp_ffc=float(ffc_adp) if ffc_adp is not None else None,
+                adp_spread=spread,
                 sigma=sigma,
                 adp_stdev=float(stdev) if stdev else None,
                 bye=team_bye.get(team) if team else None,

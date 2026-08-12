@@ -18,6 +18,11 @@
     "candidates": 14,
     "max_candidates_per_position": 4,
     "sim_horizon_picks": 6,
+    "_comment_adp": "Sleeper is weighted higher because it is the ADP your leaguemates see inside the app they are drafting in. FFC still matters: it is the only source broken out by league size, and it supplies the per-player stdev.",
+    "adp_weights": { "sleeper": 0.65, "ffc": 0.35 },
+    "adp_disagreement_sigma_weight": 0.35,
+    "adp_disagreement_cap": 30.0,
+
     "adp_sigma_floor": 1.0,
     "adp_sigma_inflate": 1.15,
     "undrafted_adp": 230.0,
@@ -54,7 +59,7 @@
   },
 
   "ui": {
-    "poll_seconds": 3,
+    "poll_seconds": 1,
     "top_n": 12,
     "color": true
   },

@@ -48,6 +48,8 @@ def _player_payload(p, rec=None) -> dict:
         "position": p.position,
         "team": p.team or "--",
         "bye": p.bye,
+        "adp_sleeper": p.adp_sleeper,
+        "adp_ffc": p.adp_ffc,
         "projection": round(p.projection, 1),
         "vor": round(p.vor, 1),
         "val": round(p.val, 1),
@@ -84,6 +86,7 @@ def serialize(st, recs, outlook, league, diagnostics, meta) -> dict:
 
     return {
         "ready": True,
+        "computing": bool(meta.get("computing")),
         "status": meta.get("status", "?"),
         "current_pick": st.current_pick,
         "total_picks": league.total_picks,

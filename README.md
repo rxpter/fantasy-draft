@@ -327,7 +327,10 @@ display. Everything the terminal board shows is there, plus:
 - **A hero card** for the current pick with its five key numbers.
 - **Colour that encodes meaning** — position tags, survival red→amber→green,
   cost-of-waiting bars scaled to the largest cliff on the board.
-- **A live/reconnecting dot**, so a dead feed is obvious immediately.
+- **A live/reconnecting dot**, so a dead feed is obvious immediately. It reads
+  `thinking…` while the simulation re-ranks.
+- **Nothing is redrawn unless it changed.** Every DOM write is guarded, so the
+  board does not flicker and CSS transitions are free to run.
 - **Light and dark** follow your OS setting, and it respects
   `prefers-reduced-motion`.
 
@@ -366,6 +369,7 @@ is ranked fifth.
 
 | Column | Meaning |
 |---|---|
+| **ADP** | Average draft position, blended from Sleeper and FFC (see [stage 4](#stage-4--adp-and-survival-probability)) |
 | **PROJ** | Season projection, discounted for injury status |
 | **VOR** | Points above **draft-day replacement** — the last player at this position who starts anywhere in the league |
 | **VAL** | Points above a **waiver-wire streamer**, if he hits his projection exactly |
@@ -444,10 +448,25 @@ VOR = (projection − replacement) × position_value_multiplier
 
 ### Stage 4 — ADP and survival probability
 
-FantasyFootballCalculator supplies **14-team PPR** ADP with a per-player stdev.
-Effective sigma is `max(stdev, 1.0) × 1.15` — FFC's stdev is pooled across
-thousands of drafts, so it measures consensus stability, not how erratic your
-particular leaguemates are.
+ADP is **blended from two sources**, weighted toward Sleeper:
+
+| Source | Weight | Why it's in the mix |
+|---|---|---|
+| **Sleeper** | 0.65 | It is the ADP displayed *inside the app your leaguemates are drafting in*, which makes it the better predictor of what they will actually do. Ships free in the projections payload — no extra request |
+| **FantasyFootballCalculator** | 0.35 | The only source broken out by **league size** (14-team ADP differs from the 12-team most rankings quote), and the only one supplying a per-player **stdev** |
+
+Blending also widens coverage: 320 players carry real ADP versus 256 from FFC
+alone.
+
+**Disagreement between the sources is itself a signal.** If Sleeper says pick 25
+and FFC says pick 45, that player's draft position is genuinely uncertain, so
+the spread is added to his sigma. It is capped at 30 picks
+(`adp_disagreement_cap`) — deep players, kickers especially, can differ by 200
+picks purely because both sources mean "undrafted", and that is noise.
+
+Effective sigma is `max(stdev, 1.0) × 1.15`, plus the capped disagreement term.
+FFC's stdev is pooled across thousands of drafts, so it measures consensus
+stability, not how erratic your particular leaguemates are.
 
 ```
 P(survives to T | still here at C) = (1 − Φ((T−0.5−adp)/σ)) / (1 − Φ((C−0.5−adp)/σ))
@@ -621,6 +640,9 @@ override `config.json`. `--no-auto-settings` disables that.
 
 | Key | Default | Meaning |
 |---|---|---|
+| `adp_weights` | sleeper 0.65, ffc 0.35 | How the ADP sources are blended |
+| `adp_disagreement_sigma_weight` | 0.35 | How much source disagreement widens the spread |
+| `adp_disagreement_cap` | 30.0 | Ceiling on that, so deep-player noise can't dominate |
 | `adp_sigma_floor` | 1.0 | Minimum ADP spread |
 | `adp_sigma_inflate` | 1.15 | FFC's pooled stdev understates single-draft variance |
 | `undrafted_adp` | 230.0 | ADP for players with no FFC row |
@@ -830,7 +852,7 @@ Two guard the bugs that actually occurred:
 | Source | Provides | Auth | Cache |
 |---|---|---|---|
 | `api.sleeper.app/v1/players/nfl` | Names, teams, depth chart, experience, injury | None | 24h |
-| `api.sleeper.app/projections/nfl/{season}` | Season projections | None | 6h |
+| `api.sleeper.app/projections/nfl/{season}` | Season projections **and Sleeper's own ADP** | None | 6h |
 | `api.sleeper.app/v1/draft/{id}/picks` | Live pick feed | None | Never |
 | `fantasyfootballcalculator.com/api/v1/adp` | 14-team ADP, stdev, bye weeks | None | 6h |
 

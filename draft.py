@@ -378,6 +378,26 @@ def main() -> int:
 
         if len(picks) != last_count or cached is None:
             last_count = len(picks)
+
+            # Publish the new pick straight away using the previous ranking,
+            # minus anyone who has just been taken. The simulation costs about
+            # a second, and waiting for it before showing that a pick landed is
+            # what made the board feel slow.
+            if web_state is not None and cached is not None:
+                stale_recs = [r for r in cached[0] if r.player.pid not in st.taken_pids]
+                web_state.set(
+                    serialize(
+                        st, stale_recs, cached[1], league, diagnostics,
+                        {
+                            "status": status,
+                            "top_n": cfg["ui"]["top_n"],
+                            "roster_targets": ecfg["roster_targets"],
+                            "sim_note": "thinking",
+                            "computing": True,
+                        },
+                    )
+                )
+
             run_sim = bool(my_slot) and (st.on_the_clock or st.picks_until_mine <= SIM_WINDOW)
             t = time.time()
             recs, outlook = recommend(players, st, league, ecfg, run_sim=run_sim)

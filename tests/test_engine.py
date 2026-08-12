@@ -25,7 +25,7 @@ from src.lineup import (
     remaining_starter_needs,
     unfilled_required,
 )
-from src.pool import Player
+from src.pool import Player, blend_adp
 from src.recommend import expected_best_at
 from src.simulate import build_context, score_roster_fast, simulate
 from src.survival import p_survives_to
@@ -320,6 +320,45 @@ class TestExpectedBest(unittest.TestCase):
         p = mk(1, "RB", 300, adp=250, sigma=5)
         p.vor = 100.0
         self.assertAlmostEqual(expected_best_at([p], 30, 1), 100.0, places=2)
+
+
+class TestAdpBlend(unittest.TestCase):
+    """Sleeper ADP is what your leaguemates see; FFC is size-specific. Use both."""
+
+    CFG = {
+        "adp_weights": {"sleeper": 0.65, "ffc": 0.35},
+        "adp_disagreement_cap": 30.0,
+    }
+
+    def test_weighted_toward_sleeper(self):
+        adp, spread = blend_adp(10.0, 20.0, self.CFG)
+        self.assertAlmostEqual(adp, 10.0 * 0.65 + 20.0 * 0.35)
+        self.assertLess(adp, 15.0)          # pulled toward Sleeper
+        self.assertAlmostEqual(spread, 10.0)
+
+    def test_single_source_is_used_verbatim(self):
+        self.assertEqual(blend_adp(12.0, None, self.CFG), (12.0, 0.0))
+        self.assertEqual(blend_adp(None, 12.0, self.CFG), (12.0, 0.0))
+
+    def test_no_source_returns_none(self):
+        adp, spread = blend_adp(None, None, self.CFG)
+        self.assertIsNone(adp)
+        self.assertEqual(spread, 0.0)
+
+    def test_agreement_produces_no_spread(self):
+        adp, spread = blend_adp(30.0, 30.0, self.CFG)
+        self.assertAlmostEqual(adp, 30.0)
+        self.assertAlmostEqual(spread, 0.0)
+
+    def test_zero_weights_do_not_divide_by_zero(self):
+        adp, _ = blend_adp(10.0, 20.0, {"adp_weights": {"sleeper": 0, "ffc": 0}})
+        self.assertIsNotNone(adp)
+
+    def test_blend_stays_between_the_sources(self):
+        for a, b in [(5.0, 90.0), (90.0, 5.0), (1.0, 2.0)]:
+            adp, _ = blend_adp(a, b, self.CFG)
+            self.assertGreaterEqual(adp, min(a, b))
+            self.assertLessEqual(adp, max(a, b))
 
 
 class TestUpside(unittest.TestCase):
