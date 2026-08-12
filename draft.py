@@ -24,6 +24,7 @@ from src.league import LeagueConfig, flex_allocation, league_from_draft  # noqa:
 from src.netcache import FetchError  # noqa: E402
 from src.pool import build_pool  # noqa: E402
 from src.recommend import build_state, recommend  # noqa: E402
+from src.webboard import BoardState, serialize, start_server  # noqa: E402
 
 CONFIG_PATH = ROOT / "config.json"
 
@@ -55,6 +56,10 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="trust config.json instead of reading league settings off the draft",
     )
+    ap.add_argument(
+        "--web", action="store_true", help="serve the web board on localhost instead of the terminal"
+    )
+    ap.add_argument("--port", type=int, default=8770, help="port for the web board")
     ap.add_argument("--no-color", action="store_true")
     return ap.parse_args()
 
@@ -199,13 +204,31 @@ class MockDraft:
         )
 
 
-def run_mock(players, diagnostics, league, cfg, args) -> int:
+def run_mock(players, diagnostics, league, cfg, args, web_state=None) -> int:
     my_slot = args.mock_slot
     mock = MockDraft(players, league, my_slot)
     by_pid = {p.pid: p for p in players}
     ecfg = cfg["engine"]
 
+    # A mock with no delay finishes faster than you can read it. On the web
+    # board that defeats the point, so pace it unless told otherwise.
+    delay = args.mock_delay or (1.5 if web_state is not None else 0.0)
+
     print(f"\nmock draft: {league.teams} teams, {league.rounds} rounds, you are slot {my_slot}\n")
+
+    def publish(st, recs, outlook, status):
+        meta = {
+            "status": status,
+            "top_n": cfg["ui"]["top_n"],
+            "roster_targets": ecfg["roster_targets"],
+            "sim_note": "mock",
+        }
+        if web_state is not None:
+            web_state.set(serialize(st, recs, outlook, league, diagnostics, meta))
+            print(f"\r  mock pick {st.current_pick}/{league.total_picks}   ", end="", flush=True)
+        else:
+            board.clear()
+            print(board.render(st, recs, outlook, league, diagnostics, meta))
 
     while len(mock.picks) < league.total_picks:
         st = build_state(mock.picks, by_pid, league, my_slot)
@@ -213,30 +236,23 @@ def run_mock(players, diagnostics, league, cfg, args) -> int:
             recs, outlook = recommend(players, st, league, ecfg, run_sim=True)
             if not recs:
                 break
-            board.clear()
-            print(
-                board.render(
-                    st, recs, outlook, league, diagnostics,
-                    {"status": "mock", "top_n": cfg["ui"]["top_n"],
-                 "roster_targets": cfg["engine"]["roster_targets"], "sim_note": "mock"},
-                )
-            )
+            publish(st, recs, outlook, "mock")
             mock.advance(my_choice=recs[0].player)
-            if args.mock_delay:
-                time.sleep(args.mock_delay)
+            if delay:
+                time.sleep(delay)
         else:
             mock.advance()
 
     st = build_state(mock.picks, by_pid, league, my_slot)
     recs, outlook = recommend(players, st, league, ecfg, run_sim=False)
-    board.clear()
-    print(
-        board.render(
-            st, recs, outlook, league, diagnostics,
-            {"status": "mock complete", "top_n": cfg["ui"]["top_n"],
-                 "roster_targets": cfg["engine"]["roster_targets"], "sim_note": "mock"},
-        )
-    )
+    publish(st, recs, outlook, "mock complete")
+    if web_state is not None:
+        print("\n  mock complete -- board stays up, ctrl-c to quit")
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            pass
     return 0
 
 
@@ -328,8 +344,19 @@ def main() -> int:
     if diagnostics.get("overridden"):
         print(f"  using {diagnostics['overridden']} projections from data/my_projections.csv")
 
+    web_state = None
+    if args.web:
+        web_state = BoardState()
+        try:
+            _server, url = start_server(web_state, args.port)
+        except OSError as exc:
+            print(f"error: could not start web board on port {args.port}: {exc}")
+            print("try a different port with --port 8771")
+            return 1
+        print(f"\n  web board: {url}   (open this on your second monitor)\n")
+
     if args.mock:
-        return run_mock(players, diagnostics, league, cfg, args)
+        return run_mock(players, diagnostics, league, cfg, args, web_state)
 
     by_pid = {p.pid: p for p in players}
     ecfg = cfg["engine"]
@@ -379,14 +406,23 @@ def main() -> int:
             except FetchError:
                 pass
 
-        board.clear()
-        print(
-            board.render(
-                st, recs, outlook, league, diagnostics,
-                {"status": status, "top_n": cfg["ui"]["top_n"],
-                 "roster_targets": cfg["engine"]["roster_targets"], "sim_note": note},
+        meta = {
+            "status": status,
+            "top_n": cfg["ui"]["top_n"],
+            "roster_targets": cfg["engine"]["roster_targets"],
+            "sim_note": note,
+        }
+        if web_state is not None:
+            web_state.set(serialize(st, recs, outlook, league, diagnostics, meta))
+            clock = "ON THE CLOCK" if st.on_the_clock else f"{st.picks_until_mine} until yours"
+            print(
+                f"\r  pick {st.current_pick}/{league.total_picks} | {status} | {clock} | {note}    ",
+                end="",
+                flush=True,
             )
-        )
+        else:
+            board.clear()
+            print(board.render(st, recs, outlook, league, diagnostics, meta))
 
         if args.once or status == "complete":
             return 0

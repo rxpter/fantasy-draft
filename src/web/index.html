@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Draft Assistant</title>
+<style>
+:root{
+  --bg:#0e1116; --surface:#161a21; --surface-2:#1c212a; --raised:#222834;
+  --line:#252c37; --line-soft:#1e242d;
+  --text:#e8ecf2; --text-2:#9aa5b4; --text-3:#66707e;
+  --accent:#4c8dff; --accent-soft:#4c8dff22;
+  --good:#3fbf7f; --good-soft:#3fbf7f1f;
+  --warn:#e0a33a; --warn-soft:#e0a33a1f;
+  --bad:#e05a5a;  --bad-soft:#e05a5a1f;
+  --qb:#a97bff; --rb:#3fbf7f; --wr:#43a9e8; --te:#e0a33a; --k:#6b7683; --def:#4fb3a8;
+  --radius:10px;
+  --ease:cubic-bezier(.2,.8,.2,1);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#f4f6f9; --surface:#ffffff; --surface-2:#f7f9fc; --raised:#eef2f7;
+    --line:#dfe5ed; --line-soft:#e9eef4;
+    --text:#131822; --text-2:#5a6675; --text-3:#8b96a5;
+    --accent:#1f6feb; --accent-soft:#1f6feb14;
+    --good:#1a8f5c; --good-soft:#1a8f5c14;
+    --warn:#a86f10; --warn-soft:#a86f1014;
+    --bad:#c53434;  --bad-soft:#c5343414;
+    --qb:#7b4fd8; --rb:#1a8f5c; --wr:#1d7fb8; --te:#a86f10; --k:#6b7683; --def:#2f8b81;
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--text);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums; padding:16px; min-height:100vh;
+}
+.bar{
+  display:flex; align-items:center; gap:16px; padding:12px 18px; margin-bottom:14px;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+}
+.pick{font-size:19px;font-weight:600;letter-spacing:-.01em}
+.sub{color:var(--text-2);font-size:13px}
+.spacer{flex:1}
+.badge{
+  padding:5px 12px;border-radius:99px;font-size:12px;font-weight:600;
+  letter-spacing:.02em;white-space:nowrap;transition:background .3s var(--ease),color .3s var(--ease);
+}
+.badge.clock{background:var(--good-soft);color:var(--good);animation:pulse 2s ease-in-out infinite}
+.badge.wait{background:var(--warn-soft);color:var(--warn)}
+.badge.idle{background:var(--raised);color:var(--text-2)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.55}}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--good);display:inline-block;margin-right:6px;transition:background .3s}
+.dot.off{background:var(--bad)}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}
+@media (max-width:1200px){.grid{grid-template-columns:1fr}}
+
+.card{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--radius); margin-bottom:14px; overflow:hidden;
+}
+.card h2{
+  font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.09em;
+  color:var(--text-3);padding:13px 16px 0;
+}
+
+/* hero */
+.hero{padding:16px 18px;border-bottom:1px solid var(--line-soft);display:flex;gap:18px;align-items:flex-start}
+.hero .who{flex:1;min-width:0}
+.hero .nm{font-size:24px;font-weight:650;letter-spacing:-.02em;line-height:1.15}
+.hero .meta{color:var(--text-2);font-size:13px;margin-top:5px}
+.hero .note{color:var(--warn);font-size:13px;margin-top:7px;min-height:19px}
+.hero .score{text-align:right;flex-shrink:0}
+.hero .val{font-size:30px;font-weight:650;letter-spacing:-.02em;line-height:1}
+.hero .gap{color:var(--text-3);font-size:12px;margin-top:5px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:14px 18px 16px}
+.stat{background:var(--surface-2);border-radius:8px;padding:9px 11px}
+.stat .l{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3)}
+.stat .v{font-size:17px;font-weight:600;margin-top:3px}
+
+/* board */
+table{width:100%;border-collapse:collapse}
+thead th{
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+  color:var(--text-3);text-align:right;padding:10px 10px;border-bottom:1px solid var(--line);
+}
+thead th.l{text-align:left}
+tbody tr{border-bottom:1px solid var(--line-soft);will-change:transform}
+tbody tr:last-child{border-bottom:none}
+tbody tr.enter{animation:slidein .45s var(--ease) both}
+@keyframes slidein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+tbody tr.top{background:var(--accent-soft)}
+td{padding:9px 10px;text-align:right;font-size:13.5px}
+td.l{text-align:left}
+td.rank{color:var(--text-3);font-size:12px;width:30px}
+.pname{font-weight:550}
+.tag{
+  display:inline-block;min-width:32px;text-align:center;padding:2px 6px;border-radius:5px;
+  font-size:10.5px;font-weight:700;letter-spacing:.03em;margin-right:8px;
+}
+.sm{color:var(--text-3);font-size:12px;margin-left:7px}
+.chip{padding:2px 7px;border-radius:5px;font-size:12px;font-weight:600}
+.notes{color:var(--text-3);font-size:12px;text-align:left;max-width:230px}
+.flash{animation:flash .8s var(--ease)}
+@keyframes flash{0%{background:var(--accent-soft)}100%{background:transparent}}
+
+/* bars */
+.row{display:flex;align-items:center;gap:10px;padding:7px 16px}
+.row .p{width:30px;font-size:12px;font-weight:650}
+.track{flex:1;height:8px;background:var(--raised);border-radius:4px;overflow:hidden}
+.fill{height:100%;border-radius:4px;width:0;transition:width .55s var(--ease),background .35s var(--ease)}
+.row .n{width:34px;text-align:right;font-size:12.5px;color:var(--text-2)}
+.row .best{width:0;flex:1.1;color:var(--text-3);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* roster */
+.slot{display:flex;gap:10px;padding:5px 16px;font-size:13px;align-items:baseline}
+.slot .s{width:38px;color:var(--text-3);font-size:11px;font-weight:650;letter-spacing:.04em;flex-shrink:0}
+.slot .p{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pills{display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px 14px}
+.pill{padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;transition:background .3s var(--ease),color .3s var(--ease)}
+.foot{padding:10px 16px 14px;color:var(--text-3);font-size:11.5px;line-height:1.7}
+.empty{padding:26px 18px;text-align:center;color:var(--text-3);font-size:13px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div>
+    <div class="pick" id="pick">—</div>
+    <div class="sub" id="sub">connecting…</div>
+  </div>
+  <div class="spacer"></div>
+  <div class="badge idle" id="clock">waiting</div>
+  <div class="sub"><span class="dot" id="dot"></span><span id="conn">live</span></div>
+</div>
+
+<div class="grid">
+  <div>
+    <div class="card">
+      <div class="hero">
+        <div class="who">
+          <div class="nm" id="h-name">—</div>
+          <div class="meta" id="h-meta"></div>
+          <div class="note" id="h-note"></div>
+        </div>
+        <div class="score">
+          <div class="val" id="h-sim">—</div>
+          <div class="gap" id="h-gap"></div>
+        </div>
+      </div>
+      <div class="stats" id="h-stats"></div>
+    </div>
+    <div class="card">
+      <table>
+        <thead><tr>
+          <th class="l" style="width:30px"></th><th class="l">Player</th>
+          <th>Proj</th><th>VOR</th><th>Val</th><th>Up</th><th>Back</th><th>Sim</th>
+          <th class="l" style="padding-left:16px">Notes</th>
+        </tr></thead>
+        <tbody id="board"></tbody>
+      </table>
+      <div class="empty" id="board-empty" style="display:none">waiting for the draft to start</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="card">
+      <h2>Cost of waiting</h2>
+      <div id="waiting" style="padding:8px 0 12px"></div>
+    </div>
+    <div class="card">
+      <h2>Your roster <span id="r-count" style="color:var(--text-3)"></span></h2>
+      <div id="lineup" style="padding:10px 0 4px"></div>
+      <div class="pills" id="depth"></div>
+      <div class="foot" id="r-foot"></div>
+    </div>
+    <div class="card">
+      <h2>Recent picks</h2>
+      <div class="foot" id="recent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const POS = {QB:'--qb',RB:'--rb',WR:'--wr',TE:'--te',K:'--k',DEF:'--def'};
+const $ = id => document.getElementById(id);
+const rows = new Map();
+let prevSim = null, fails = 0;
+
+const posColor = p => `var(${POS[p] || '--k'})`;
+const survColor = s => s >= .7 ? 'var(--good)' : s >= .35 ? 'var(--warn)' : 'var(--bad)';
+const costColor = c => c >= 15 ? 'var(--bad)' : c >= 6 ? 'var(--warn)' : 'var(--good)';
+
+function tween(el, to, dur = 550){
+  const from = prevSim === null ? to : prevSim;
+  if (from === to){ el.textContent = to.toFixed(0); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const k = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - k, 3);
+    el.textContent = (from + (to - from) * e).toFixed(0);
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+function tag(p){
+  return `<span class="tag" style="background:${posColor(p)}22;color:${posColor(p)}">${p}</span>`;
+}
+
+function renderHero(recs){
+  if (!recs.length){ $('h-name').textContent = '—'; $('h-meta').textContent=''; $('h-note').textContent=''; $('h-sim').textContent='—'; $('h-gap').textContent=''; $('h-stats').innerHTML=''; return; }
+  const r = recs[0];
+  $('h-name').textContent = r.name;
+  $('h-meta').innerHTML = `${tag(r.position)}${r.team} · bye ${r.bye ?? '—'} · adp ${r.adp}`;
+  $('h-note').textContent = r.note || '';
+  if (r.sim !== null && r.sim !== undefined){
+    tween($('h-sim'), r.sim); prevSim = r.sim;
+    const gap = recs[1] && recs[1].sim != null ? (r.sim - recs[1].sim) : null;
+    $('h-gap').textContent = gap === null ? '' : gap > 1.5 ? `+${gap.toFixed(1)} over next` : `near tie · +${gap.toFixed(1)}`;
+  } else { $('h-sim').textContent = '—'; $('h-gap').textContent = ''; }
+  const cells = [['proj',r.projection],['vor',r.vor],['val',r.val],['up',r.upside],['back',(r.survive*100).toFixed(0)+'%']];
+  $('h-stats').innerHTML = cells.map(([l,v],i)=>{
+    const c = i===4 ? `color:${survColor(r.survive)}` : i===3 && r.upside>=10 ? 'color:var(--good)' : '';
+    return `<div class="stat"><div class="l">${l}</div><div class="v" style="${c}">${v}</div></div>`;
+  }).join('');
+}
+
+function buildRow(r){
+  const tr = document.createElement('tr');
+  tr.dataset.pid = r.pid;
+  tr.classList.add('enter');
+  tr.innerHTML = `<td class="rank"></td><td class="l"></td><td></td><td></td><td></td>
+    <td class="up"></td><td class="back"></td><td class="sim"></td><td class="notes"></td>`;
+  return tr;
+}
+
+function fillRow(tr, r, i){
+  const c = tr.children;
+  c[0].textContent = i + 1;
+  c[1].innerHTML = `${tag(r.position)}<span class="pname">${r.name}</span><span class="sm">${r.team}${r.bye?' · '+r.bye:''}</span>`;
+  c[2].textContent = r.projection.toFixed(1);
+  c[3].textContent = r.vor.toFixed(0);
+  c[4].textContent = r.val.toFixed(0);
+  c[5].innerHTML = r.upside >= 10
+    ? `<span class="chip" style="background:var(--good-soft);color:var(--good)">${r.upside.toFixed(0)}</span>`
+    : `<span style="color:var(--text-3)">${r.upside.toFixed(0)}</span>`;
+  c[6].innerHTML = `<span style="color:${survColor(r.survive)};font-weight:600">${(r.survive*100).toFixed(0)}%</span>`;
+  const sim = c[7], next = r.sim == null ? '—' : r.sim.toFixed(1);
+  if (sim.textContent && sim.textContent !== next) sim.classList.remove('flash'), void sim.offsetWidth, sim.classList.add('flash');
+  sim.textContent = next;
+  c[8].textContent = r.note || '';
+  tr.classList.toggle('top', i === 0);
+}
+
+function renderBoard(recs, done){
+  const body = $('board');
+  const empty = $('board-empty');
+  empty.style.display = recs.length ? 'none' : 'block';
+  empty.textContent = done ? 'draft complete' : 'waiting for the draft to start';
+
+  const before = new Map();
+  rows.forEach((el, pid) => before.set(pid, el.getBoundingClientRect().top));
+
+  const seen = new Set();
+  recs.forEach((r, i) => {
+    let tr = rows.get(r.pid);
+    if (!tr){ tr = buildRow(r); rows.set(r.pid, tr); }
+    fillRow(tr, r, i);
+    body.appendChild(tr);
+    seen.add(r.pid);
+  });
+  rows.forEach((el, pid) => { if (!seen.has(pid)){ el.remove(); rows.delete(pid); } });
+
+  // FLIP: rows glide to their new rank instead of snapping.
+  rows.forEach((el, pid) => {
+    const was = before.get(pid);
+    if (was === undefined) return;
+    const dy = was - el.getBoundingClientRect().top;
+    if (!dy) return;
+    el.style.transition = 'none';
+    el.style.transform = `translateY(${dy}px)`;
+    requestAnimationFrame(() => {
+      el.style.transition = 'transform .45s var(--ease)';
+      el.style.transform = '';
+    });
+  });
+}
+
+function renderWaiting(out){
+  const max = Math.max(1, ...out.map(o => o.cost));
+  $('waiting').innerHTML = out.slice(0, 6).map(o => `
+    <div class="row">
+      <div class="p" style="color:${posColor(o.position)}">${o.position}</div>
+      <div class="track"><div class="fill" style="width:${Math.max(2,(o.cost/max)*100)}%;background:${costColor(o.cost)}"></div></div>
+      <div class="n">${o.cost.toFixed(0)}</div>
+    </div>`).join('') || '<div class="empty">—</div>';
+}
+
+function renderRoster(ro){
+  $('r-count').textContent = `${ro.size}/${ro.capacity}`;
+  $('lineup').innerHTML = ro.lineup.map(p =>
+    `<div class="slot"><div class="s" style="color:${posColor(p.position)}">${p.slot}</div>
+     <div class="p">${p.name}<span class="sm">${p.bye ?? '—'}</span></div></div>`).join('')
+    + (ro.bench.length ? `<div class="slot" style="margin-top:6px"><div class="s">BN</div>
+       <div class="p" style="color:var(--text-3);white-space:normal">${ro.bench.map(b=>b.name).join(', ')}</div></div>` : '')
+    || '<div class="empty">no picks yet</div>';
+
+  $('depth').innerHTML = ro.depth.map(d => {
+    const ok = d.have >= d.want;
+    return `<span class="pill" style="background:${ok?'var(--good-soft)':'var(--bad-soft)'};color:${ok?'var(--good)':'var(--bad)'}">${d.position} ${d.have}/${d.want}</span>`;
+  }).join('');
+
+  const bits = [`projected starters <b style="color:var(--text)">${ro.points}</b>`];
+  const needs = Object.entries(ro.needs).map(([k,v])=>`${k}×${v}`).join(', ');
+  bits.push(needs ? `still needed ${needs}` : 'starters filled');
+  const bc = Object.entries(ro.bye_conflicts).map(([w,n])=>`wk${w}: ${n}`).join(', ');
+  if (bc) bits.push(`<span style="color:var(--bad)">bye conflicts ${bc}</span>`);
+  $('r-foot').innerHTML = bits.join('<br>');
+}
+
+function render(d){
+  if (!d.ready){ $('sub').textContent = 'waiting for draft data…'; return; }
+  $('pick').textContent = `Pick ${d.current_pick} · Round ${d.round}`;
+  $('sub').textContent = `${d.teams}-team ${d.scoring} · slot ${d.my_slot ?? '?'} · ${d.status}`;
+
+  const done = d.current_pick > d.total_picks || !d.next_picks.length;
+  const c = $('clock');
+  if (done){ c.className = 'badge idle'; c.textContent = 'draft complete'; }
+  else if (d.on_the_clock){ c.className = 'badge clock'; c.textContent = 'on the clock'; }
+  else if (d.my_slot){ c.className = 'badge wait'; c.textContent = `${d.picks_until_mine} until your pick`; }
+  else { c.className = 'badge idle'; c.textContent = 'slot unknown'; }
+
+  renderHero(d.recommendations);
+  renderBoard(d.recommendations, done);
+  renderWaiting(d.outlook);
+  renderRoster(d.roster);
+  $('recent').innerHTML = d.recent.map(p => `${p.pick}. ${p.name}`).join(' · ') || '—';
+}
+
+async function tick(){
+  try{
+    const r = await fetch('/state.json', {cache:'no-store'});
+    render(await r.json());
+    fails = 0; $('dot').classList.remove('off'); $('conn').textContent = 'live';
+  }catch(e){
+    if (++fails > 1){ $('dot').classList.add('off'); $('conn').textContent = 'reconnecting'; }
+  }
+}
+tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

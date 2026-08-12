@@ -21,21 +21,22 @@ no account beyond the Sleeper one you already have.
 3. [Quick start](#quick-start)
 4. [Part 1 — Testing with mock drafts](#part-1--testing-with-mock-drafts)
 5. [Part 2 — Running a live draft](#part-2--running-a-live-draft)
-6. [Reading the board](#reading-the-board)
-7. [How players are valued](#how-players-are-valued)
-8. [The objective function](#the-objective-function)
-9. [The Monte Carlo](#the-monte-carlo)
-10. [Configuration reference](#configuration-reference)
-11. [Tuning recipes](#tuning-recipes)
-12. [Bringing your own projections](#bringing-your-own-projections)
-13. [Command line reference](#command-line-reference)
-14. [Project layout](#project-layout)
-15. [Tests](#tests)
-16. [Data sources](#data-sources)
-17. [Troubleshooting](#troubleshooting)
-18. [Limitations](#limitations)
-19. [Design decisions](#design-decisions)
-20. [License](#license)
+6. [The web board](#the-web-board)
+7. [Reading the board](#reading-the-board)
+8. [How players are valued](#how-players-are-valued)
+9. [The objective function](#the-objective-function)
+10. [The Monte Carlo](#the-monte-carlo)
+11. [Configuration reference](#configuration-reference)
+12. [Tuning recipes](#tuning-recipes)
+13. [Bringing your own projections](#bringing-your-own-projections)
+14. [Command line reference](#command-line-reference)
+15. [Project layout](#project-layout)
+16. [Tests](#tests)
+17. [Data sources](#data-sources)
+18. [Troubleshooting](#troubleshooting)
+19. [Limitations](#limitations)
+20. [Design decisions](#design-decisions)
+21. [License](#license)
 
 ---
 
@@ -300,6 +301,47 @@ nothing is stored locally except the data cache.
 - **Settings misdetected** — restart with `--no-auto-settings` to force
   `config.json`.
 - **Too slow between picks** — restart with `--sims 300`.
+
+---
+
+## The web board
+
+A browser version of the same board, built for a second monitor. Add `--web` to
+any command:
+
+```bash
+python draft.py --web --username YOUR_SLEEPER_NAME
+```
+
+It prints a URL — open it on your other screen:
+
+```
+web board: http://127.0.0.1:8770/   (open this on your second monitor)
+```
+
+The terminal drops to a single status line while the browser carries the
+display. Everything the terminal board shows is there, plus:
+
+- **Rows glide between ranks** as the simulation reorders them (FLIP animation),
+  so you can see *what moved* rather than the whole screen snapping.
+- **A hero card** for the current pick with its five key numbers.
+- **Colour that encodes meaning** — position tags, survival red→amber→green,
+  cost-of-waiting bars scaled to the largest cliff on the board.
+- **A live/reconnecting dot**, so a dead feed is obvious immediately.
+- **Light and dark** follow your OS setting, and it respects
+  `prefers-reduced-motion`.
+
+Preview it against a self-playing draft, no Sleeper account needed:
+
+```bash
+python draft.py --mock --web --mock-slot 7
+```
+
+Implementation notes: `http.server` from the standard library, one
+self-contained HTML file, no CDN and no build step, bound to `127.0.0.1` only —
+it is not reachable from the rest of your network. The terminal renderer is
+untouched and stays the default, so if anything misbehaves mid-draft you drop
+back by removing one flag. Use `--port` if 8770 is taken.
 
 ---
 
@@ -675,6 +717,8 @@ The count is confirmed at startup: `using 214 projections from data/my_projectio
 | `--sims N` | Monte Carlo iterations this run |
 | `--top N` | Recommendations to show |
 | `--once` | Render once and exit |
+| `--web` | Serve the web board on localhost instead of the terminal |
+| `--port N` | Port for the web board (default 8770) |
 | `--mock` | Offline rehearsal draft |
 | `--mock-slot N` | Your slot in the offline mock |
 | `--mock-delay S` | Seconds between offline mock picks |
@@ -721,6 +765,8 @@ src/
   simulate.py         Monte Carlo and the objective function
   recommend.py        ranking, cost-of-waiting, candidate selection
   board.py            terminal rendering
+  webboard.py         localhost server + JSON state for the web board
+  web/index.html      the web board itself (self-contained, no CDN)
 
 tests/test_engine.py  45 tests, no network required
 data/                 gitignored: API cache + your projections CSV
@@ -743,6 +789,7 @@ Roughly 2,900 lines.
 | `simulate` | Flat index-based arrays and the hot scoring loop |
 | `recommend` | What the user actually sees ranked |
 | `board` | ANSI output. No curses, no TUI library — it must start instantly and never crash |
+| `webboard` | Threaded `http.server`, localhost-only, and the one piece of shared mutable state in the program (explicitly locked) |
 
 ---
 
