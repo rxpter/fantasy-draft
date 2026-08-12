@@ -1,0 +1,3 @@
+# Normalise line endings in the repo. Developed on Windows, so without this
+# every file lands in git with CRLF and diffs become unreadable for anyone else.
+* text=auto eol=lf

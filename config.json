@@ -1,0 +1,67 @@
+{
+  "league": {
+    "teams": 14,
+    "scoring": "ppr",
+    "starters": { "QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 2, "K": 1, "DEF": 1 },
+    "flex_positions": ["RB", "WR", "TE"],
+    "bench": 5
+  },
+
+  "draft": {
+    "sleeper_username": null,
+    "draft_id": null,
+    "my_draft_slot": null
+  },
+
+  "engine": {
+    "sims": 800,
+    "candidates": 14,
+    "max_candidates_per_position": 4,
+    "sim_horizon_picks": 6,
+    "adp_sigma_floor": 1.0,
+    "adp_sigma_inflate": 1.15,
+    "undrafted_adp": 230.0,
+    "undrafted_sigma": 30.0,
+    "bye_penalty_per_extra_starter": 6.0,
+    "bye_starters_allowed_per_week": 2,
+    "max_at_position": { "QB": 2, "TE": 2, "K": 1, "DEF": 1, "RB": 8, "WR": 8 },
+    "late_round_only": { "K": 2, "DEF": 3 },
+
+    "_comment_position_value": "Your thumb on the scale. 1.0 = trust the projections. Raise RB to lean earlier and harder on running backs than the math alone suggests.",
+    "position_value_multiplier": { "QB": 1.0, "RB": 1.0, "WR": 1.0, "TE": 1.0, "K": 1.0, "DEF": 1.0 },
+
+    "roster_targets": { "RB": 5, "WR": 5, "TE": 1, "QB": 1, "K": 1, "DEF": 1 },
+    "target_shortfall_penalty": { "RB": 22.0, "WR": 9.0, "TE": 6.0, "QB": 5.0, "K": 0.0, "DEF": 0.0 },
+
+    "starter_miss_rate": { "RB": 0.22, "WR": 0.15, "TE": 0.15, "QB": 0.10, "K": 0.05, "DEF": 0.05 },
+    "waiver_depth_extra_rounds": 1,
+
+    "upside_weight": 0.40,
+    "projection_cv": { "QB": 0.20, "RB": 0.32, "WR": 0.28, "TE": 0.30, "K": 0.15, "DEF": 0.18 },
+    "projection_sd_floor": 12.0,
+    "rookie_upside_boost": 0.35,
+    "backup_upside_boost": 0.45,
+    "market_disagreement_weight": 0.5,
+    "injury_multiplier": {
+      "IR": 0.35,
+      "PUP": 0.55,
+      "Out": 0.55,
+      "Doubtful": 0.75,
+      "Questionable": 0.97,
+      "Sus": 0.7,
+      "NA": 0.6
+    }
+  },
+
+  "ui": {
+    "poll_seconds": 3,
+    "top_n": 12,
+    "color": true
+  },
+
+  "cache": {
+    "players_ttl_hours": 24,
+    "projections_ttl_hours": 6,
+    "adp_ttl_hours": 6
+  }
+}

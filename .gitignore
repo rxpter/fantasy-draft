@@ -1,0 +1,17 @@
+# Cached API responses (the Sleeper player file alone is ~14 MB) and your own
+# projection overrides. Nothing here belongs in version control.
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
