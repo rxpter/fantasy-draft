@@ -35,6 +35,7 @@ no account beyond the Sleeper one you already have.
 17. [Troubleshooting](#troubleshooting)
 18. [Limitations](#limitations)
 19. [Design decisions](#design-decisions)
+20. [License](#license)
 
 ---
 
@@ -878,3 +879,15 @@ QB look like a 130-point steal and burned a bench spot every draft.
 **Simulation only near your pick.** Running 800 iterations on all 210 picks
 would be wasted work. Inside 12 picks it runs; outside, the board still shows
 live VOR, survival, and cost-of-waiting instantly.
+
+---
+
+## License
+
+[MIT](LICENSE) — © 2026 Mitchell Curtis Richard Walker.
+
+That covers **this code**. It does not cover the data it reads: Sleeper and
+FantasyFootballCalculator each set their own terms for their APIs, and this
+tool is built for personal use against them. No data from either is
+redistributed in this repository — everything is fetched at runtime and cached
+locally under a gitignored `data/`.
