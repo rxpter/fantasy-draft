@@ -88,7 +88,7 @@ thead th{
 thead th.l{text-align:left}
 tbody tr{border-bottom:1px solid var(--line-soft);will-change:transform}
 tbody tr:last-child{border-bottom:none}
-tbody tr.enter{animation:slidein .45s var(--ease) both}
+tbody tr.enter{animation:slidein .45s var(--ease)}
 @keyframes slidein{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
 tbody tr.top{background:var(--accent-soft)}
 td{padding:9px 10px;text-align:right;font-size:13.5px}
@@ -200,6 +200,24 @@ function setText(el, v){ const s = String(v); if (el.textContent !== s) el.textC
 function setStyle(el, prop, v){ if (el.style[prop] !== v) el.style[prop] = v; }
 function setClass(el, cls, on){ if (el.classList.contains(cls) !== !!on) el.classList.toggle(cls, !!on); }
 
+/* Put `node` at `index` inside `host`, but ONLY if it is not already there.
+   appendChild() on an attached node detaches and re-inserts it, which restarts
+   any CSS animation on that node -- calling it every poll is what made rows
+   replay their entrance animation twice a second. */
+function place(host, node, index){
+  const at = host.children[index];
+  if (at !== node) host.insertBefore(node, at || null);
+}
+
+/* Play a one-shot animation class and clean it up, so it can never re-fire
+   later just because the node moved. */
+function playOnce(el, cls){
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  el.addEventListener('animationend', () => el.classList.remove(cls), {once: true});
+}
+
 function tween(el, to, dur = 550){
   const from = prevSim === null ? to : prevSim;
   if (from === to){ setText(el, to.toFixed(0)); return; }
@@ -275,6 +293,13 @@ function renderHero(recs){
 function buildRow(r){
   const tr = document.createElement('tr');
   tr.dataset.pid = r.pid;
+  // Strip the entrance animation once it has played -- if the class lingers,
+  // any later re-insertion replays it. The timer is a backstop: animations do
+  // not run at all in a backgrounded tab, so animationend may never fire, and
+  // a row must never be left wearing an animation class.
+  const done = () => tr.classList.remove('enter');
+  tr.addEventListener('animationend', done, {once: true});
+  setTimeout(done, 700);
   tr.classList.add('enter');
   const mk = (cls) => { const td = document.createElement('td'); if (cls) td.className = cls; tr.appendChild(td); return td; };
 
@@ -316,9 +341,7 @@ function fillRow(tr, r, i){
   setStyle(n.backSpan, 'color', survColor(r.survive));
 
   const next = r.sim == null ? '—' : r.sim.toFixed(1);
-  if (n.sim.textContent && n.sim.textContent !== next){
-    n.sim.classList.remove('flash'); void n.sim.offsetWidth; n.sim.classList.add('flash');
-  }
+  if (n.sim.textContent && n.sim.textContent !== next) playOnce(n.sim, 'flash');
   setText(n.sim, next);
   setText(n.note, r.note || '');
   setClass(tr, 'top', i === 0);
@@ -338,7 +361,7 @@ function renderBoard(recs, done){
     let tr = rows.get(r.pid);
     if (!tr){ tr = buildRow(r); rows.set(r.pid, tr); }
     fillRow(tr, r, i);
-    body.appendChild(tr);
+    place(body, tr, i);
     seen.add(r.pid);
   });
   rows.forEach((el, pid) => { if (!seen.has(pid)){ el.remove(); rows.delete(pid); } });
@@ -361,7 +384,7 @@ function renderBoard(recs, done){
 function renderWaiting(out){
   const max = Math.max(1, ...out.map(o => o.cost));
   const host = $('waiting'), seen = new Set();
-  out.slice(0, 6).forEach(o => {
+  out.slice(0, 6).forEach((o, i) => {
     let b = bars.get(o.position);
     if (!b){
       const row = document.createElement('div'); row.className = 'row';
@@ -372,7 +395,7 @@ function renderWaiting(out){
       track.appendChild(fill); row.append(p, track, num);
       b = {row, p, fill, num}; bars.set(o.position, b);
     }
-    host.appendChild(b.row);
+    place(host, b.row, i);
     setText(b.p, o.position); setStyle(b.p, 'color', posColor(o.position));
     // Width is only ever assigned when it changes, so the CSS transition
     // actually gets to run instead of being reset every second.
@@ -388,7 +411,7 @@ function renderRoster(ro){
   setText($('r-count'), `${ro.size}/${ro.capacity}`);
 
   const host = $('lineup'), seen = new Set();
-  ro.lineup.forEach(p => {
+  ro.lineup.forEach((p, i) => {
     const key = `${p.slot}:${p.pid}`;
     let s = slots.get(key);
     if (!s){
@@ -400,7 +423,7 @@ function renderRoster(ro){
       who.append(nm, bye); row.append(lbl, who);
       s = {row, lbl, nm, bye}; slots.set(key, s);
     }
-    host.appendChild(s.row);
+    place(host, s.row, i);
     setText(s.lbl, p.slot); setStyle(s.lbl, 'color', posColor(p.position));
     setText(s.nm, p.name); setText(s.bye, p.bye ?? '—');
     seen.add(key);
@@ -415,14 +438,16 @@ function renderRoster(ro){
     who.style.color = 'var(--text-3)'; who.style.whiteSpace = 'normal';
     row.append(lbl, who); bn = {row, who}; slots.set('__bench__', bn);
   }
-  if (ro.bench.length){ host.appendChild(bn.row); setText(bn.who, ro.bench.map(b => b.name).join(', ')); }
-  else bn.row.remove();
+  if (ro.bench.length){
+    place(host, bn.row, ro.lineup.length);
+    setText(bn.who, ro.bench.map(b => b.name).join(', '));
+  } else bn.row.remove();
 
   const dhost = $('depth'), dseen = new Set();
-  ro.depth.forEach(d => {
+  ro.depth.forEach((d, i) => {
     let pill = pills.get(d.position);
     if (!pill){ pill = document.createElement('span'); pill.className = 'pill'; pills.set(d.position, pill); }
-    dhost.appendChild(pill);
+    place(dhost, pill, i);
     const ok = d.have >= d.want;
     setText(pill, `${d.position} ${d.have}/${d.want}`);
     setStyle(pill, 'background', ok ? 'var(--good-soft)' : 'var(--bad-soft)');
