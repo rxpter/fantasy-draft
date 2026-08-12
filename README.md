@@ -75,8 +75,10 @@ before a draft is not the moment to discover a broken `pip`.
 
 ## Quick start
 
+Clone the repo, or `cd` into the folder if you already have it:
+
 ```bash
-cd C:\fantasy-draft
+cd fantasy-draft
 ```
 
 ```bash
@@ -104,7 +106,7 @@ finished roster. No account, no waiting, ~20 seconds.
 **Step 1.** Open a terminal in the project folder:
 
 ```bash
-cd C:\fantasy-draft
+cd fantasy-draft
 ```
 
 **Step 2.** Run a full draft from a slot:
