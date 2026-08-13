@@ -32,7 +32,7 @@ if str(ROOT) not in sys.path:
 from src import adp as adp_mod  # noqa: E402
 from src.league import LeagueConfig, compute_replacement_levels  # noqa: E402
 from src.netcache import FetchError, get_json  # noqa: E402
-from src.pool import Player, blend_adp  # noqa: E402
+from src.pool import Player, apply_market_ranking, blend_adp  # noqa: E402
 from src.sleeper import ADP_KEY, BASE, FANTASY_POSITIONS, SCORING_KEY  # noqa: E402
 from src.survival import effective_sigma  # noqa: E402
 from src.upside import estimate_sd, option_value, waiver_levels  # noqa: E402
@@ -196,6 +196,8 @@ def build_historical_pool(
     for p in players:
         p.replacement = levels.get(p.position, 0.0)
         p.vor = (p.projection - p.replacement) * weights.get(p.position, 1.0)
+
+    apply_market_ranking(players, ecfg.get("market_ranked_positions"))
 
     waivers = waiver_levels(players, league, ecfg)
     for p in players:

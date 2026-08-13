@@ -392,6 +392,71 @@ class TestAdpBlend(unittest.TestCase):
             self.assertLessEqual(adp, max(a, b))
 
 
+class TestMarketRanking(unittest.TestCase):
+    """Kicker projections are noise, so their draft order follows ADP."""
+
+    def test_reorders_within_position_by_adp(self):
+        from src.pool import apply_market_ranking
+
+        ks = [
+            mk(1, "K", 120, adp=180),   # best projection, worst ADP
+            mk(2, "K", 110, adp=140),
+            mk(3, "K", 100, adp=120),   # worst projection, best ADP
+        ]
+        for p in ks:
+            p.vor = p.projection - 90
+        apply_market_ranking(ks, ["K"])
+        # Best ADP should now carry the highest VOR.
+        self.assertEqual(max(ks, key=lambda p: p.vor).pid, "3")
+        self.assertEqual(min(ks, key=lambda p: p.vor).pid, "1")
+
+    def test_position_total_value_is_unchanged(self):
+        """Reassigning, not inventing -- the position is worth what it was."""
+        from src.pool import apply_market_ranking
+
+        ks = [mk(i, "K", 120 - i * 5, adp=200 - i * 10) for i in range(1, 6)]
+        for p in ks:
+            p.vor = p.projection - 90
+        before_vor = sorted(p.vor for p in ks)
+        before_proj = sorted(p.projection for p in ks)
+        apply_market_ranking(ks, ["K"])
+        self.assertEqual(sorted(p.vor for p in ks), before_vor)
+        self.assertEqual(sorted(p.projection for p in ks), before_proj)
+
+    def test_projection_moves_with_vor(self):
+        """The objective scores lineups by projection, so it has to follow.
+
+        Reordering VOR alone left the simulation still preferring the
+        highest-projected kicker regardless of the board ranking.
+        """
+        from src.pool import apply_market_ranking
+
+        ks = [mk(1, "K", 120, adp=180), mk(2, "K", 100, adp=120)]
+        for p in ks:
+            p.vor = p.projection - 90
+        apply_market_ranking(ks, ["K"])
+        best = max(ks, key=lambda p: p.vor)
+        self.assertEqual(best.pid, "2")            # best ADP
+        self.assertEqual(best.projection, 120)     # and carries the top projection
+
+    def test_other_positions_untouched(self):
+        from src.pool import apply_market_ranking
+
+        rbs = [mk(1, "RB", 200, adp=90), mk(2, "RB", 150, adp=20)]
+        for p in rbs:
+            p.vor = p.projection
+        apply_market_ranking(rbs, ["K"])
+        self.assertEqual(max(rbs, key=lambda p: p.vor).pid, "1")
+
+    def test_empty_or_missing_config_is_safe(self):
+        from src.pool import apply_market_ranking
+
+        ks = [mk(1, "K", 120, adp=180)]
+        apply_market_ranking(ks, None)
+        apply_market_ranking(ks, [])
+        apply_market_ranking([], ["K"])
+
+
 class TestUpside(unittest.TestCase):
     def test_zero_uncertainty_is_plain_intrinsic_value(self):
         self.assertAlmostEqual(option_value(150, 0, 100), 50.0)

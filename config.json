@@ -2,47 +2,90 @@
   "league": {
     "teams": 14,
     "scoring": "ppr",
-    "starters": { "QB": 1, "RB": 2, "WR": 2, "TE": 1, "FLEX": 2, "K": 1, "DEF": 1 },
-    "flex_positions": ["RB", "WR", "TE"],
+    "starters": {
+      "QB": 1,
+      "RB": 2,
+      "WR": 2,
+      "TE": 1,
+      "FLEX": 2,
+      "K": 1,
+      "DEF": 1
+    },
+    "flex_positions": [
+      "RB",
+      "WR",
+      "TE"
+    ],
     "bench": 5
   },
-
   "draft": {
     "sleeper_username": null,
     "draft_id": null,
     "my_draft_slot": null
   },
-
   "engine": {
     "sims": 800,
     "candidates": 14,
     "max_candidates_per_position": 4,
     "sim_horizon_picks": 6,
     "_comment_adp": "Sleeper is weighted higher because it is the ADP your leaguemates see inside the app they are drafting in. FFC still matters: it is the only source broken out by league size, and it supplies the per-player stdev.",
-    "adp_weights": { "sleeper": 0.65, "ffc": 0.35 },
+    "adp_weights": {
+      "sleeper": 0.65,
+      "ffc": 0.35
+    },
     "adp_disagreement_sigma_weight": 0.35,
     "adp_disagreement_cap": 30.0,
-
     "adp_sigma_floor": 1.0,
     "adp_sigma_inflate": 1.15,
     "undrafted_adp": 230.0,
     "undrafted_sigma": 30.0,
     "bye_penalty_per_extra_starter": 6.0,
     "bye_starters_allowed_per_week": 2,
-    "max_at_position": { "QB": 2, "TE": 2, "K": 1, "DEF": 1, "RB": 8, "WR": 8 },
-    "late_round_only": { "K": 2, "DEF": 3 },
-
+    "max_at_position": {
+      "QB": 2,
+      "TE": 2,
+      "K": 1,
+      "DEF": 1,
+      "RB": 8,
+      "WR": 8
+    },
+    "late_round_only": {
+      "K": 2,
+      "DEF": 3
+    },
     "_comment_position_value": "Your thumb on the scale. 1.0 = trust the projections. Raise RB to lean earlier and harder on running backs than the math alone suggests.",
-    "position_value_multiplier": { "QB": 1.0, "RB": 1.0, "WR": 1.0, "TE": 1.0, "K": 1.0, "DEF": 1.0 },
-
-    "roster_targets": { "RB": 5, "WR": 5, "TE": 1, "QB": 1, "K": 1, "DEF": 1 },
-    "target_shortfall_penalty": { "RB": 22.0, "WR": 9.0, "TE": 6.0, "QB": 5.0, "K": 0.0, "DEF": 0.0 },
-
-    "starter_miss_rate": { "RB": 0.22, "WR": 0.15, "TE": 0.15, "QB": 0.10, "K": 0.05, "DEF": 0.05 },
+    "position_value_multiplier": {
+      "QB": 1.0,
+      "RB": 1.0,
+      "WR": 1.0,
+      "TE": 1.0,
+      "K": 1.0,
+      "DEF": 1.0
+    },
+    "_comment_market_ranked": "Positions where the projection carries no usable signal, so the draft order within the position follows ADP instead. Kicker projections are pure noise; defence projections are not, and the backtest shows the engine already beats ADP there.",
+    "market_ranked_positions": [
+      "K"
+    ],
+    "roster_targets": {},
+    "target_shortfall_penalty": {},
+    "starter_miss_rate": {
+      "RB": 0.22,
+      "WR": 0.15,
+      "TE": 0.15,
+      "QB": 0.1,
+      "K": 0.05,
+      "DEF": 0.05
+    },
     "waiver_depth_extra_rounds": 1,
-
-    "upside_weight": 0.40,
-    "projection_cv": { "QB": 0.20, "RB": 0.32, "WR": 0.28, "TE": 0.30, "K": 0.15, "DEF": 0.18 },
+    "upside_weight": 0.0,
+    "projection_cv": {
+      "QB": 0.2,
+      "RB": 0.32,
+      "WR": 0.28,
+      "TE": 0.3,
+      "K": 0.15,
+      "DEF": 0.18
+    },
     "projection_sd_floor": 12.0,
     "rookie_upside_boost": 0.35,
     "backup_upside_boost": 0.45,
@@ -55,15 +98,15 @@
       "Questionable": 0.97,
       "Sus": 0.7,
       "NA": 0.6
-    }
+    },
+    "_comment_upside": "Backtested to zero. The option-value model was a clean idea -- a bench player's downside is capped -- but 2023-2025 showed a monotonic decline as the weight rose (0.0->1852, 0.1->1841, 0.2->1818, 0.4->1768 pts). The UP column still displays; it just no longer steers the objective.",
+    "_comment_targets": "Backtested off. Flat per-player penalties overwhelmed real value gaps -- the engine passed Kittle (VOR 65) for Pollard (VOR 58) to hit an RB target, then took a TE at VOR -24 in round 12. Depth demand now comes from starter_miss_rate, which the backtest values at +47 pts/season."
   },
-
   "ui": {
     "poll_seconds": 1,
     "top_n": 12,
     "color": true
   },
-
   "cache": {
     "players_ttl_hours": 24,
     "projections_ttl_hours": 6,

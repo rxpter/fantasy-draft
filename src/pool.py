@@ -64,6 +64,34 @@ class Player:
         return f"{self.name}{tag}"
 
 
+def apply_market_ranking(players: list[Player], positions) -> None:
+    """Order chosen positions by ADP instead of by projection.
+
+    Kicker projections carry essentially no signal -- the spread between the
+    first and twentieth kicker is inside the noise of the estimate, so ranking
+    them by value over replacement is close to ranking them at random. The
+    market knows which kicker holds the job; the projection does not.
+
+    Rather than distort cross-position comparisons, this keeps the position's
+    existing set of VOR values and simply reassigns them in ADP order. The
+    position is worth exactly what it was worth before; only the ordering
+    *within* it changes.
+    """
+    for pos in positions or ():
+        group = [p for p in players if p.position == pos]
+        if len(group) < 2:
+            continue
+        # Permute projection alongside VOR. Reordering VOR alone leaves the
+        # simulation still valuing the lineup slot by projection, so it went on
+        # preferring the highest-projected kicker no matter how the board was
+        # ranked -- which was most of the remaining kicker deficit.
+        vors = sorted((p.vor for p in group), reverse=True)
+        projections = sorted((p.projection for p in group), reverse=True)
+        for player, vor, proj in zip(sorted(group, key=lambda x: x.adp), vors, projections):
+            player.vor = vor
+            player.projection = proj
+
+
 def blend_adp(sleeper_adp, ffc_adp, ecfg: dict) -> tuple[float | None, float]:
     """Combine ADP sources into one number, plus how much they disagree.
 
@@ -218,6 +246,8 @@ def build_pool(cfg: dict, league: LeagueConfig, season: str) -> tuple[list[Playe
 
     # Risk model. Waiver level is what you could stream at this position after
     # the draft; upside is the option value of holding the player over it.
+    apply_market_ranking(players, ecfg.get("market_ranked_positions"))
+
     waivers = waiver_levels(players, league, ecfg)
     for p in players:
         p.waiver_level = waivers.get(p.position, 0.0)
