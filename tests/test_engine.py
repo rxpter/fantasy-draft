@@ -277,6 +277,37 @@ class TestDraftSettingsDetection(unittest.TestCase):
         self.assertEqual(lg.starters, self.HOME.starters)
 
 
+class TestDraftState(unittest.TestCase):
+    def test_my_roster_preserves_draft_order(self):
+        """Order must be deterministic -- the backtest depends on it."""
+        from src.recommend import build_state
+
+        lg = LeagueConfig()
+        players = [mk(i, "RB", 200 - i) for i in range(1, 6)]
+        by_pid = {p.pid: p for p in players}
+        picks = [
+            {"pick_no": 1, "draft_slot": 7, "player_id": "3"},
+            {"pick_no": 2, "draft_slot": 2, "player_id": "1"},
+            {"pick_no": 3, "draft_slot": 7, "player_id": "5"},
+            {"pick_no": 4, "draft_slot": 7, "player_id": "2"},
+        ]
+        st = build_state(picks, by_pid, lg, 7)
+        self.assertEqual([p.pid for p in st.my_roster], ["3", "5", "2"])
+
+    def test_unknown_player_ids_are_skipped(self):
+        from src.recommend import build_state
+
+        lg = LeagueConfig()
+        players = [mk(1, "RB", 200)]
+        picks = [
+            {"pick_no": 1, "draft_slot": 7, "player_id": "1"},
+            {"pick_no": 15, "draft_slot": 7, "player_id": "ghost"},
+        ]
+        st = build_state(picks, {p.pid: p for p in players}, lg, 7)
+        self.assertEqual([p.pid for p in st.my_roster], ["1"])
+        self.assertIn("ghost", st.taken_pids)
+
+
 class TestCandidateDiversity(unittest.TestCase):
     def test_one_position_cannot_own_the_whole_board(self):
         """Late drafts let a single position dominate VOR; the board must not

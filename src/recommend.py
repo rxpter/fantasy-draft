@@ -48,12 +48,16 @@ def build_state(
             st.my_future_picks[0] - st.current_pick if st.my_future_picks else 0
         )
 
-        mine = {
-            str(pk["player_id"])
+        # Keep draft order. Building this from a set made the ordering depend
+        # on hash iteration, which is no way to run a reproducible backtest --
+        # and it scrambled the bench display on the board for no reason.
+        st.my_roster = [
+            players_by_pid[str(pk["player_id"])]
             for pk in picks
-            if pk.get("player_id") and pk.get("draft_slot") == my_slot
-        }
-        st.my_roster = [players_by_pid[p] for p in mine if p in players_by_pid]
+            if pk.get("player_id")
+            and pk.get("draft_slot") == my_slot
+            and str(pk["player_id"]) in players_by_pid
+        ]
 
     return st
 
