@@ -35,6 +35,42 @@ def _make_ssl_context() -> ssl.SSLContext:
 
 _SSL_CONTEXT = _make_ssl_context()
 
+# When true, every cache read is skipped and the network is authoritative.
+_FORCE_REFRESH = False
+
+# What each feed cost this run, so the caller can show the user how old their
+# data actually is. Stale data that looks fresh is the dangerous kind.
+_STATUS: list[dict] = []
+
+
+def set_force_refresh(enabled: bool) -> None:
+    global _FORCE_REFRESH
+    _FORCE_REFRESH = bool(enabled)
+
+
+def reset_status() -> None:
+    _STATUS.clear()
+
+
+def feed_status() -> list[dict]:
+    return list(_STATUS)
+
+
+def _record(url: str, source: str, age_hours: float) -> None:
+    _STATUS.append({"url": url, "source": source, "age_hours": age_hours})
+
+
+def status_summary() -> dict:
+    """Worst-case age across every feed, and whether any served stale."""
+    if not _STATUS:
+        return {"feeds": 0, "max_age_hours": 0.0, "stale": False, "from_network": 0}
+    return {
+        "feeds": len(_STATUS),
+        "max_age_hours": max(s["age_hours"] for s in _STATUS),
+        "stale": any(s["source"] == "stale" for s in _STATUS),
+        "from_network": sum(1 for s in _STATUS if s["source"] == "network"),
+    }
+
 
 class FetchError(RuntimeError):
     pass
@@ -52,12 +88,14 @@ def get_json(url: str, ttl_hours: float = 0.0, timeout: int = 90):
     """
     path = _cache_path(url)
 
-    if ttl_hours > 0 and path.exists():
+    if ttl_hours > 0 and not _FORCE_REFRESH and path.exists():
         age = time.time() - path.stat().st_mtime
         if age < ttl_hours * 3600:
             try:
                 with path.open("r", encoding="utf-8") as fh:
-                    return json.load(fh)
+                    data = json.load(fh)
+                _record(url, "cache", age / 3600)
+                return data
             except (OSError, ValueError):
                 pass  # corrupt cache entry -- fall through and refetch
 
@@ -72,11 +110,15 @@ def get_json(url: str, ttl_hours: float = 0.0, timeout: int = 90):
     except urllib.error.HTTPError as exc:
         raise FetchError(f"HTTP {exc.code} for {url}") from exc
     except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        # Fall back to a stale cache entry rather than dying mid-draft.
+        # Fall back to a stale cache entry rather than dying mid-draft -- but
+        # record it, so the caller can say so out loud. Silently serving
+        # three-day-old ADP as though it were current is worse than an error.
         if path.exists():
             try:
                 with path.open("r", encoding="utf-8") as fh:
-                    return json.load(fh)
+                    data = json.load(fh)
+                _record(url, "stale", (time.time() - path.stat().st_mtime) / 3600)
+                return data
             except (OSError, ValueError):
                 pass
         raise FetchError(f"network error for {url}: {exc}") from exc
@@ -96,4 +138,5 @@ def get_json(url: str, ttl_hours: float = 0.0, timeout: int = 90):
         except OSError:
             pass  # cache is an optimisation, never fatal
 
+    _record(url, "network", 0.0)
     return data

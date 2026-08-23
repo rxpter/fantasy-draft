@@ -108,8 +108,9 @@
     "color": true
   },
   "cache": {
-    "players_ttl_hours": 24,
-    "projections_ttl_hours": 6,
-    "adp_ttl_hours": 6
+    "_comment": "Short by design: it is draft season and ADP moves daily. Use --refresh to ignore these entirely.",
+    "players_ttl_hours": 12,
+    "projections_ttl_hours": 4,
+    "adp_ttl_hours": 4
   }
 }

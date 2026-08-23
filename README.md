@@ -252,11 +252,18 @@ right means the offline mock reflects your real league.
 
 ### On draft day
 
-**Step 1.** Start it 10–15 minutes early, in a window beside the draft room:
+**Step 1.** Start it 10–15 minutes early with `--refresh`, in a window beside
+the draft room:
 
 ```bash
-python draft.py
+python draft.py --refresh
 ```
+
+`--refresh` ignores the cache and pulls every feed live. This matters more than
+it sounds: measured over four days in draft season, **67 of 268 players moved
+three or more picks of ADP, and seven appeared on the board who had not been
+there at all**. Every run prints how old its inputs are, and warns if anything
+is over 12 hours or was served stale because the network failed.
 
 That uses everything in `config.json`. Or pass it explicitly:
 
@@ -681,9 +688,9 @@ override `config.json`. `--no-auto-settings` disables that.
 | `ui.poll_seconds` | 3 | Pick-feed refresh rate |
 | `ui.top_n` | 12 | Recommendations shown |
 | `ui.color` | true | ANSI colour |
-| `cache.players_ttl_hours` | 24 | Player file (~14 MB) |
-| `cache.projections_ttl_hours` | 6 | Projections |
-| `cache.adp_ttl_hours` | 6 | ADP |
+| `cache.players_ttl_hours` | 12 | Player file (~15 MB) |
+| `cache.projections_ttl_hours` | 4 | Projections |
+| `cache.adp_ttl_hours` | 4 | ADP |
 
 ---
 
@@ -741,6 +748,7 @@ The count is confirmed at startup: `using 214 projections from data/my_projectio
 | `--once` | Render once and exit |
 | `--web` | Serve the web board on localhost instead of the terminal |
 | `--port N` | Port for the web board (default 8770) |
+| `--refresh` | Ignore the cache; pull every feed live. Use before a real draft |
 | `--mock` | Offline rehearsal draft |
 | `--mock-slot N` | Your slot in the offline mock |
 | `--mock-delay S` | Seconds between offline mock picks |
@@ -885,7 +893,11 @@ or pass `--slot N`.
 
 **Settings look wrong** — `--no-auto-settings` forces `config.json`.
 
-**Slow first run** — the 14 MB player file. Cached for 24h afterwards.
+**Slow first run** — the 15 MB player file. Cached afterwards; `--refresh` forces a re-pull.
+
+**Is my data current?** Every run prints a `data:` line with the age of the
+oldest feed, and warns past 12 hours or if a feed was served stale after a
+network failure. `--refresh` guarantees a live pull.
 
 **Slow between picks** — lower `sims`, or pass `--sims 300`.
 

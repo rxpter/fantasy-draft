@@ -19,7 +19,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from src import board, sleeper  # noqa: E402
+from src import board, netcache, sleeper  # noqa: E402
 from src.league import LeagueConfig, flex_allocation, league_from_draft  # noqa: E402
 from src.netcache import FetchError  # noqa: E402
 from src.pool import build_pool  # noqa: E402
@@ -55,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         "--no-auto-settings",
         action="store_true",
         help="trust config.json instead of reading league settings off the draft",
+    )
+    ap.add_argument(
+        "--refresh",
+        action="store_true",
+        help="ignore the cache and pull every feed fresh (do this before a real draft)",
     )
     ap.add_argument(
         "--web", action="store_true", help="serve the web board on localhost instead of the terminal"
@@ -123,6 +128,31 @@ def do_list(username: str, season: str) -> int:
         print(f"\n  no {season} leagues or drafts found for this user")
         return 1
     return 0
+
+
+STALE_WARN_HOURS = 12.0
+
+
+def describe_data_freshness() -> str:
+    """One line on how old the inputs are, loud when that matters.
+
+    ADP moves every day in draft season -- a quarter of the board shifted by
+    three or more picks over four days when this was measured. Data age is not
+    a footnote, so it goes on screen every run.
+    """
+    s = netcache.status_summary()
+    if not s["feeds"]:
+        return "data: (nothing fetched)"
+
+    age = s["max_age_hours"]
+    freshness = "just fetched" if age < 0.1 else f"up to {age:.1f}h old"
+    line = f"data: {s['feeds']} feeds, {freshness} ({s['from_network']} pulled fresh)"
+
+    if s["stale"]:
+        return line + "  !! SOME FEEDS SERVED STALE -- the network failed, run --refresh"
+    if age >= STALE_WARN_HOURS:
+        return line + f"  !! older than {STALE_WARN_HOURS:.0f}h -- run --refresh before drafting"
+    return line
 
 
 def apply_draft_settings(
@@ -321,6 +351,8 @@ def main() -> int:
             print("  slot unknown -- pass --slot N, or --username to auto-detect")
 
     print(f"loading player pool for {season} ({league.teams}-team {league.scoring})...")
+    netcache.set_force_refresh(args.refresh)
+    netcache.reset_status()
     t0 = time.time()
     try:
         players, diagnostics = build_pool(cfg, league, season)
@@ -343,6 +375,7 @@ def main() -> int:
     )
     if diagnostics.get("overridden"):
         print(f"  using {diagnostics['overridden']} projections from data/my_projections.csv")
+    print("  " + describe_data_freshness())
 
     web_state = None
     if args.web:

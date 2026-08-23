@@ -392,6 +392,65 @@ class TestAdpBlend(unittest.TestCase):
             self.assertLessEqual(adp, max(a, b))
 
 
+class TestDataFreshness(unittest.TestCase):
+    """Stale data that looks current is the dangerous kind."""
+
+    def setUp(self):
+        from src import netcache
+
+        self.nc = netcache
+        netcache.reset_status()
+
+    def tearDown(self):
+        self.nc.reset_status()
+        self.nc.set_force_refresh(False)
+
+    def test_no_feeds_reports_nothing_fetched(self):
+        import draft
+
+        self.assertIn("nothing fetched", draft.describe_data_freshness())
+
+    def test_fresh_feeds_carry_no_warning(self):
+        import draft
+
+        self.nc._record("a", "network", 0.0)
+        self.nc._record("b", "cache", 0.5)
+        line = draft.describe_data_freshness()
+        self.assertNotIn("!!", line)
+        self.assertIn("2 feeds", line)
+
+    def test_old_cache_warns(self):
+        import draft
+
+        self.nc._record("a", "cache", 84.0)
+        self.assertIn("--refresh", draft.describe_data_freshness())
+
+    def test_stale_fallback_warns_loudly(self):
+        """A served-stale feed means the network failed -- never stay quiet."""
+        import draft
+
+        self.nc._record("a", "network", 0.0)
+        self.nc._record("b", "stale", 100.0)
+        line = draft.describe_data_freshness()
+        self.assertIn("STALE", line)
+
+    def test_summary_tracks_worst_case_age(self):
+        self.nc._record("a", "network", 0.0)
+        self.nc._record("b", "cache", 3.0)
+        self.nc._record("c", "cache", 9.0)
+        s = self.nc.status_summary()
+        self.assertEqual(s["feeds"], 3)
+        self.assertEqual(s["max_age_hours"], 9.0)
+        self.assertEqual(s["from_network"], 1)
+        self.assertFalse(s["stale"])
+
+    def test_force_refresh_flag_round_trips(self):
+        self.nc.set_force_refresh(True)
+        self.assertTrue(self.nc._FORCE_REFRESH)
+        self.nc.set_force_refresh(False)
+        self.assertFalse(self.nc._FORCE_REFRESH)
+
+
 class TestMarketRanking(unittest.TestCase):
     """Kicker projections are noise, so their draft order follows ADP."""
 
